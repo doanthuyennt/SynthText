@@ -30,8 +30,8 @@ DATA_PATH = 'data'
 OUT_FILE = 'results/SynthText.h5'
 
 MASKS_DIR = "./masks"
-
-
+# DS_Store ???
+# 10520 jpg + 383 png + 165 jpeg -> 11068
 def add_res_to_db(imgname, res, db):
     """
     Add the synthetically generated text image instance
@@ -41,14 +41,14 @@ def add_res_to_db(imgname, res, db):
     for i in range(ninstance):
         dname = "%s_%d" % (imgname, i)
         db['data'].create_dataset(dname, data=res[i]['img'])
-        db['data'][dname].attrs['charBB'] = res[i]['charBB']
-        db['data'][dname].attrs['wordBB'] = res[i]['wordBB']
+        db['data'][dname].attrs['charBB'] = res[i]['charBB'].astype(int)
+        db['data'][dname].attrs['wordBB'] = res[i]['wordBB'].astype(int)
         L = res[i]['txt']
         L = [n.encode("ascii", "ignore") for n in L]
         db['data'][dname].attrs['txt'] = L
 
 
-def main(images,repeat,max_time,output_path,output_folder,viz=False, debug=False, output_masks=False, data_path=None):
+def main(args):
     """
     Entry point.
 
@@ -56,6 +56,16 @@ def main(images,repeat,max_time,output_path,output_folder,viz=False, debug=False
         viz: display generated images. If this flag is true, needs user input to continue with every loop iteration.
         output_masks: output masks of text, which was used during generation
     """
+    images        = args.num_images
+    repeat        = args.repeat_image
+    max_time      = args.max_time
+    output_folder = args.output_folder
+    output_path   = args.output_path
+    viz           = args.viz
+    debug         = args.debug 
+    output_masks  = args.output_masks
+    data_path     = args.data_path
+    storeh5       = args.storeh5
     if output_masks:
         # create a directory if not exists for masks
         if not os.path.exists(MASKS_DIR):
@@ -81,7 +91,7 @@ def main(images,repeat,max_time,output_path,output_folder,viz=False, debug=False
         images = N
     start_idx, end_idx = 0, min(images, N)
 
-    renderer = RendererV3(DATA_PATH, max_time=max_time, debug=debug)
+    renderer = RendererV3(data_path, max_time=max_time, debug=debug)
     outjson = os.path.join(output_folder,"outjson_synth")
     outimage = os.path.join(output_folder,"outimage_synth")
     try:
@@ -124,13 +134,58 @@ def main(images,repeat,max_time,output_path,output_folder,viz=False, debug=False
                                   ninstance=repeat)
             if len(res) > 0:
                 # non-empty : successful in placing text:
-                add_res_to_db(imname, res, out_db)
+                if storeh5:
+                    add_res_to_db(imname, res, out_db)
                 if debug:
                     print("    Success. " + str(len(res[0]['txt'])) + " texts placed:")
                     print("    Texts:" + ";".join(res[0]['txt']) + "")
                     ws = re.sub(' +', ' ', (" ".join(res[0]['txt']).replace("\n", " "))).strip().split(" ")
                     print("    Words: #" +str(len(ws)) + " " + ";".join(ws) + "")
                     print("    Words bounding boxes: " + str(res[0]['wordBB'].shape) + "")
+                    cs = "".join(ws)
+                    print("    Chars: #" +str(len(cs)) + "")
+                    print("    Chars bounding boxes: " + str(res[0]['charBB'].shape) + "")
+                if not storeh5:
+                    for r in res:
+                        rand = random.randint(1,1000)
+                        dname = imname.replace(".",  "_{}_{}.".format(i,rand)).replace(".png","").replace(".jpg","").replace(".jpeg","")
+                        outdict = {}
+                        outdict['image_name'] = dname + ".jpg"
+                        outdict['words'] = []
+                        ws = re.sub(' +', ' ', (" ".join(r['txt']).replace("\n", " "))).strip().split(" ")
+                        cs = "".join(ws)
+                        start = 0
+                        end = 0
+                        chars_list = []
+                        count = 0
+                        for i,word in enumerate(ws):
+                            word_BB = r['wordBB'][:,:,i]
+                            word_len = len(word)
+                            end = end + word_len
+                            chars = word
+                            chars_list.append(chars)
+                            chars_BB = r['charBB'][:,:,start:end]
+
+                            start = end
+                            count += chars_BB.shape[-1]
+                            # print(chars,len(chars),chars_BB.shape)
+                            word_dict = {
+                                "text":word,
+                                "points":word_BB.astype(int).tolist(),
+                                "chars": []
+                            }
+
+                            for char,char_BB in zip(chars,chars_BB.transpose(2,0,1)):
+                                word_dict["chars"].append({
+                                    "text":char,
+                                    "points":char_BB.astype(int).tolist(),
+                                })
+                            outdict['words'].append(word_dict)
+                        with open(os.path.join(output_folder,"outjson_synth",dname+'.json'),'w') as outjson:
+                            json.dump(outdict,outjson,indent=1)
+                        saved_name = os.path.join(output_folder,"outimage_synth" , outdict['image_name'] )
+                        imageio.imwrite(saved_name, r['img'])
+
             else:
                 print("    Failure: No text placed.")
 
@@ -196,7 +251,8 @@ def str2bool(v):
 
 if __name__ == '__main__':
     import argparse
-
+    import random
+    random.seed(2021)
     parser = argparse.ArgumentParser(description='Genereate Synthetic Scene-Text Images')
     parser.add_argument("--images", type=int, dest='num_images', default=1,
                         help="number of images to use for generation (-1 to use all available)")
@@ -215,9 +271,7 @@ if __name__ == '__main__':
                         help="output folder")    
     parser.add_argument("--data", type=str, dest='data_path', default='data/',
                         help="absolute path to data directory containing images, segmaps and depths")
-    
+    parser.add_argument('--storeh5', action='store_true', dest='storeh5', default=False,
+                        help='flag for turning on visualizations')
     args = parser.parse_args()
-    main(images=args.num_images,repeat=args.repeat_image,max_time=args.max_time,
-                output_folder=args.output_folder,
-                output_path=args.output_path,
-                viz=args.viz, debug=args.debug, output_masks=args.output_masks, data_path=args.data_path)
+    main(args)
