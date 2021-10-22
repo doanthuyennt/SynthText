@@ -21,7 +21,7 @@ from colorize3_poisson import Colorize
 from common import *
 import traceback, itertools
 import imageio
-
+import os
 
 DEBUG = True
 
@@ -372,13 +372,14 @@ def viz_textbb(fignum, text_im, bb_list, alpha=1.0):
 
 class RendererV3(object):
 
-    def __init__(self, data_dir, max_time=None):
+    def __init__(self, data_dir, max_time=None,debug=False):
         self.text_renderer = tu.RenderFont(data_dir)
         self.colorizer = Colorize(data_dir)
         self.min_char_height = 8  # px
         self.min_asp_ratio = 0.4  #
         self.max_text_regions = 7
         self.max_time = max_time
+        self.debug = debug
 
     def filter_regions(self, regions, filt):
         """
@@ -623,6 +624,11 @@ class RendererV3(object):
             nregions = len(regions['place_mask'])
             if nregions < 1:  # no good region to place text on
                 return []
+        except KeyboardInterrupt:
+            try:
+                sys.exit(0)
+            except SystemExit:
+                os._exit(0)
         except:
             # failure in pre-text placement
             # import traceback
@@ -654,7 +660,7 @@ class RendererV3(object):
             NUM_REP = 5  # re-use each region three times:
             reg_range = np.arange(NUM_REP * num_txt_regions) % num_txt_regions
 
-            if DEBUG:
+            if self.debug:
                 print("    ... try text rendering for %s regions", len(reg_range))
 
             for idx in reg_range:
@@ -672,13 +678,18 @@ class RendererV3(object):
                 except TimeoutException as msg:
                     print(msg)
                     continue
+                except KeyboardInterrupt:
+                    try:
+                        sys.exit(0)
+                    except SystemExit:
+                        os._exit(0)
                 except:
                     traceback.print_exc()
                     # some error in placing text on the region
                     continue
 
                 if txt_render_res is not None:
-                    if DEBUG:
+                    if self.debug:
                         print("    ... text rendering attempt finished successfully")
                     placed = True
                     img, text, bb, collision_mask = txt_render_res

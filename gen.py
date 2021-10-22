@@ -18,8 +18,8 @@ from functools import reduce
 import re
 from time import time
 from data_provider import DateProvider
-
-
+import json
+import shutil
 # Define some configuration variables:
 NUM_IMG = 1  # number of images to use for generation (-1 to use all available):
 INSTANCE_PER_IMAGE = 1  # number of times to use the same image
@@ -48,7 +48,7 @@ def add_res_to_db(imgname, res, db):
         db['data'][dname].attrs['txt'] = L
 
 
-def main(viz=False, debug=False, output_masks=False, data_path=None):
+def main(images,repeat,max_time,output_path,output_folder,viz=False, debug=False, output_masks=False, data_path=None):
     """
     Entry point.
 
@@ -70,19 +70,31 @@ def main(viz=False, debug=False, output_masks=False, data_path=None):
     print(colorize(Color.BLUE, '\t-> done', bold=True))
 
     # open the output h5 file:
-    out_db = h5py.File(OUT_FILE, 'w')
+    out_db = h5py.File(output_path, 'w')
     out_db.create_group('/data')
     print(colorize(Color.GREEN, 'Storing the output in: ' + OUT_FILE, bold=True))
 
     # get the names of the image files in the dataset:
     imnames = provider.get_imnames()
     N = len(imnames)
-    global NUM_IMG
-    if NUM_IMG < 0:
-        NUM_IMG = N
-    start_idx, end_idx = 0, min(NUM_IMG, N)
+    if images < 0:
+        images = N
+    start_idx, end_idx = 0, min(images, N)
 
-    renderer = RendererV3(DATA_PATH, max_time=SECS_PER_IMG)
+    renderer = RendererV3(DATA_PATH, max_time=max_time, debug=debug)
+    outjson = os.path.join(output_folder,"outjson_synth")
+    outimage = os.path.join(output_folder,"outimage_synth")
+    try:
+        shutil.rmtree(outjson)
+    except OSError as e:
+        print("Error: %s - %s." % (e.filename, e.strerror))
+    try:
+        shutil.rmtree(outimage)
+    except OSError as e:
+        print("Error: %s - %s." % (e.filename, e.strerror))
+    os.makedirs(outjson)
+    os.makedirs(outimage)
+    count_image = 0 
     for i in range(start_idx, end_idx):
         imname = imnames[i]
 
@@ -109,7 +121,7 @@ def main(viz=False, debug=False, output_masks=False, data_path=None):
                 print("\n    Processing " + str(imname) + "...")
 
             res = renderer.render_text(img, depth, seg, area, label,
-                                  ninstance=INSTANCE_PER_IMAGE)
+                                  ninstance=repeat)
             if len(res) > 0:
                 # non-empty : successful in placing text:
                 add_res_to_db(imname, res, out_db)
@@ -160,6 +172,11 @@ def main(viz=False, debug=False, output_masks=False, data_path=None):
                         raw_input(colorize(Color.BLUE, 'continue?', True))
                 if 'q' in input(colorize(Color.RED, 'continue? (enter to continue, q to exit): ', True)):
                     break
+        except KeyboardInterrupt:
+            try:
+                sys.exit(0)
+            except SystemExit:
+                os._exit(0)
         except:
             traceback.print_exc()
             print(colorize(Color.GREEN, '>>>> CONTINUING....', bold=True))
@@ -167,18 +184,40 @@ def main(viz=False, debug=False, output_masks=False, data_path=None):
     provider.close()
     out_db.close()
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='Genereate Synthetic Scene-Text Images')
+    parser.add_argument("--images", type=int, dest='num_images', default=1,
+                        help="number of images to use for generation (-1 to use all available)")
+    parser.add_argument("--repeat", type=int, dest='repeat_image', default=1,
+                        help="number of times to use the same image")
+    parser.add_argument("--max-time", type=int, dest='max_time', default=5,
+                        help="max time per image in seconds")
+    parser.add_argument("--output-path", type=str, dest='output_path', default="results/SynthText.h5",
+                        help="output path")
     parser.add_argument('--viz', action='store_true', dest='viz', default=False,
                         help='flag for turning on visualizations')
     parser.add_argument('--output-masks', action='store_true', dest='output_masks', default=False,
                         help='flag for turning on output of masks')
-    parser.add_argument('--debug', action='store_true', dest='debug', default=False,
-                        help='flag for turning on debug output')
-    parser.add_argument("--data", type=str, dest='data_path', default=None,
+    parser.add_argument('--debug', type=str2bool, nargs='?', dest='debug', default=False,help='flag for turning on debug output')
+    parser.add_argument("--output-folder", type=str, dest='output_folder', default="results_synth/",
+                        help="output folder")    
+    parser.add_argument("--data", type=str, dest='data_path', default='data/',
                         help="absolute path to data directory containing images, segmaps and depths")
+    
     args = parser.parse_args()
-    main(viz=args.viz, debug=args.debug, output_masks=args.output_masks, data_path=args.data_path)
+    main(images=args.num_images,repeat=args.repeat_image,max_time=args.max_time,
+                output_folder=args.output_folder,
+                output_path=args.output_path,
+                viz=args.viz, debug=args.debug, output_masks=args.output_masks, data_path=args.data_path)
