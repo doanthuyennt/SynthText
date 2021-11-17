@@ -105,6 +105,14 @@ def main(args):
     os.makedirs(outjson)
     os.makedirs(outimage)
     count_image = 0 
+    count_instance_folder = 0
+    folder_index = 0
+    output_folder_img = os.path.join(output_folder,"outimage_synth",str(folder_index))
+    output_folder_json = os.path.join(output_folder,"outjson_synth",str(folder_index))
+    if not os.path.exists(output_folder_img):
+        os.makedirs(output_folder_img)
+    if not os.path.exists(output_folder_json):
+        os.makedirs(output_folder_json)
     for i in range(start_idx, end_idx):
         imname = imnames[i]
 
@@ -147,6 +155,16 @@ def main(args):
                     print("    Chars bounding boxes: " + str(res[0]['charBB'].shape) + "")
                 if not storeh5:
                     for r in res:
+                        
+                        if count_instance_folder == 500:
+                            count_instance_folder = 0
+                            folder_index += 1
+                            output_folder_img = os.path.join(output_folder,"outimage_synth",str(folder_index))
+                            output_folder_json = os.path.join(output_folder,"outjson_synth",str(folder_index))
+                            if not os.path.exists(output_folder_img):
+                                os.makedirs(output_folder_img)
+                            if not os.path.exists(output_folder_json):
+                                os.makedirs(output_folder_json)
                         rand = random.randint(1,1000)
                         dname = imname.replace(".",  "_{}_{}.".format(i,rand)).replace(".png","").replace(".jpg","").replace(".jpeg","")
                         outdict = {}
@@ -181,10 +199,15 @@ def main(args):
                                     "points":char_BB.astype(int).tolist(),
                                 })
                             outdict['words'].append(word_dict)
-                        with open(os.path.join(output_folder,"outjson_synth",dname+'.json'),'w') as outjson:
+                        # with open(os.path.join(output_folder,"outjson_synth",dname+'.json'),'w') as outjson:
+                        #     json.dump(outdict,outjson,indent=1)
+                        # saved_name = os.path.join(output_folder,"outimage_synth" , outdict['image_name'] )
+                        with open(os.path.join(output_folder_json,dname+'.json'),'w') as outjson:
                             json.dump(outdict,outjson,indent=1)
-                        saved_name = os.path.join(output_folder,"outimage_synth" , outdict['image_name'] )
+                        saved_name = os.path.join(output_folder_img , outdict['image_name'] )
                         imageio.imwrite(saved_name, r['img'])
+
+                        count_instance_folder += 1
 
             else:
                 print("    Failure: No text placed.")

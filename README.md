@@ -58,6 +58,28 @@ Note: I do not own the copyright to these images.
 * add character statistic 
 * add corpus contains 73913 words
 
+## New folder structure
+for example:
+```
+results_synth/
+|-- outimage_synth
+|   |-- 0
+|   |   |-- ...
+|   |   |-- ant+hill_100_16_986.jpg
+|   |   |-- ant+hill_100_18_982.jpg
+|   |   |-- ant+hill_100_20_756.jpg
+|   |   |-- ...
+....
+
+results_synth/
+|-- outjson_synth
+|   |-- 0
+|   |   |-- ...
+|   |   |-- ant+hill_100_16_986.json
+|   |   |-- ant+hill_100_18_982.json
+|   |   |-- ant+hill_100_20_756.json
+|   |   |-- ...
+```
 ### Further Information
 Please refer to the paper for more information, or contact me (email address in the paper).
 
